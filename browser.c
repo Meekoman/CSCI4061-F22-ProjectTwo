@@ -34,7 +34,13 @@ tab_list TABS[MAX_TABS];
 
 // return total number of tabs
 int get_num_tabs () {
-  return 1;
+  int count = 0;
+  for (int i=0; i < MAX_TABS; i++) {
+    if (TABS[i].free == 1) {
+      count++;
+    }
+  }
+  return count;
 }
 
 // get next free tab index
@@ -71,6 +77,7 @@ void update_favorites_file (char *uri) {
 
 // Set up favorites array
 void init_favorites (char *fname) {
+  //TODO: 
 }
 
 // Make fd non-blocking just as in class!
@@ -87,6 +94,22 @@ int non_block_pipe (int fd) {
 // Checks if tab is bad and url violates constraints; if so, return.
 // Otherwise, send NEW_URI_ENTERED command to the tab on inbound pipe
 void handle_uri (char *uri, int tab_index) {
+  if (bad_format(uri)) {
+    perror("URL bad format");
+    return;
+  }
+
+  if (on_blacklist(uri)) {
+    perror("URL on blacklist");
+    return;
+  }
+
+  if (tab_index > MAX_TABS)
+    perror("Tab number exceeds MAX_TABS");
+    return;
+
+  write(comm[tab_index].outbound[1], 
+        uri, (sizeof (char)*MAX_URL));
 }
 
 
@@ -99,14 +122,17 @@ void uri_entered_cb (GtkWidget* entry, gpointer data) {
     return;
   }
 
-  // Get the tab (hint: wrapper.h)
+  char *uripoint;
+  int tab_index;
 
+  // Get the tab (hint: wrapper.h)
+  tab_index = query_tab_id_for_request(entry, data);
 
   // Get the URL (hint: wrapper.h)
-
+  uripoint = get_entered_uri(entry);
 
   // Hint: now you are ready to handle_the_uri
-
+  handle_uri(uripoint, tab_index);
 }
   
 
@@ -121,21 +147,36 @@ void new_tab_created_cb (GtkButton *button, gpointer data) {
   }
 
   // at tab limit?
-
+  if (get_num_tabs()>MAX_TABS) {
+    return;
+  }
 
   // Get a free tab
-
+  int tab_idx = get_free_tab();
 
   // Create communication pipes for this tab
-  
+  pipe(comm[tab_idx].inbound);
+  pipe(comm[tab_idx].outbound);
 
   // Make the read ends non-blocking 
   
   
   // fork and create new render tab
+  if (fork() == 0) {
+    perror("child process for tab has arrived");
+    
   // Note: render has different arguments now: tab_index, both pairs of pipe fd's
   // (inbound then outbound) -- this last argument will be 4 integers "a b c d"
   // Hint: stringify args
+    int in_r = comm[tab_idx].inbound[0];
+    int in_w = comm[tab_idx].inbound[1];
+    int out_r = comm[tab_idx].outbound[0];
+    int out_w = comm[tab_idx].outbound[1];
+    
+    char args[100]; // TODO:  change this later to a value that is more limited
+    sprintf(args, " %d %d %d %d", in_r, in_w, out_r, out_w);
+    execl("./render", args);
+  }
 
   // Controller parent just does some TABS bookkeeping
 }
@@ -160,8 +201,10 @@ void menu_item_selected_cb (GtkWidget *menu_item, gpointer data) {
   sprintf(uri, "https://%s", basic_uri);
 
   // Get the tab (hint: wrapper.h)
+  int tab_id = query_tab_id_for_request(menu_item, data);
 
   // Hint: now you are ready to handle_the_uri
+  handle_uri(basic_uri, tab_id);
 
   return;
 }
@@ -174,6 +217,8 @@ int run_control() {
   int i, nRead;
   req_t req;
 
+ 
+  
   //Create controller window
   create_browser(CONTROLLER_TAB, 0, G_CALLBACK(new_tab_created_cb),
 		 G_CALLBACK(uri_entered_cb), &b_window, comm[0]);
@@ -183,7 +228,6 @@ int run_control() {
   
   while (1) {
     process_single_gtk_event();
-
     // Read from all tab pipes including private pipe (index 0)
     // to handle commands:
     // PLEASE_DIE (controller should die, self-sent): send PLEASE_DIE to all tabs
@@ -197,6 +241,7 @@ int run_control() {
       nRead = read(comm[i].outbound[0], &req, sizeof(req_t));
 
       // Check that nRead returned something before handling cases
+      if (nRead != 0) continue;
 
       // Case 1: PLEASE_DIE
 
@@ -220,11 +265,21 @@ int main(int argc, char **argv)
 
   init_tabs ();
   // init blacklist (see util.h), and favorites (write this, see above)
-
+  init_blacklist(".blacklist");
+  init_favorites(".favorites");
 
   // Fork controller
-  // Child creates a pipe for itself comm[0]
-  // then calls run_control ()
-  // Parent waits ...
+  while (fork()==0) {
+    // Child creates a pipe for itself comm[0]
+    pipe(comm[0].inbound);
+    pipe(comm[0].outbound);
 
+    printf("this is the child process speaking \n");
+    // then calls run_control ()
+    int i = run_control();
+    printf("run status is %d", i);
+  }
+  
+  // Parent waits ...
+  wait(0);
 }
