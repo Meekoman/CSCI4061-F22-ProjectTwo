@@ -84,6 +84,12 @@ void init_favorites (char *fname) {
 // Return 0 if ok, -1 otherwise
 // Really a util but I want you to do it :-)
 int non_block_pipe (int fd) {
+  int nFlags;
+  
+  if ((nFlags = fcntl(fd, F_GETFL, 0)) < 0)
+    return -1;
+  if ((fcntl(fd, F_SETFL, nFlags | O_NONBLOCK)) < 0)
+    return -1;
   return 0;
 }
 
@@ -95,19 +101,19 @@ int non_block_pipe (int fd) {
 // Otherwise, send NEW_URI_ENTERED command to the tab on inbound pipe
 void handle_uri (char *uri, int tab_index) {
   if (bad_format(uri)) {
-    perror("URL bad format");
+    alert("URL bad format");
     return;
   }
 
   if (on_blacklist(uri)) {
-    perror("URL on blacklist");
+    alert("URL on blacklist");
     return;
   }
 
-  if (tab_index > MAX_TABS)
-    perror("Tab number exceeds MAX_TABS");
+  if (tab_index > MAX_TABS) {
+    alert("Tab number exceeds MAX_TABS");
     return;
-
+  }
   write(comm[tab_index].outbound[1], 
         uri, (sizeof (char)*MAX_URL));
 }
@@ -141,7 +147,8 @@ void uri_entered_cb (GtkWidget* entry, gpointer data) {
 // Create new tab process with pipes
 // Long function
 void new_tab_created_cb (GtkButton *button, gpointer data) {
-  
+  perror("new tab function entered\n");
+
   if (data == NULL) {
     return;
   }
@@ -159,25 +166,31 @@ void new_tab_created_cb (GtkButton *button, gpointer data) {
   pipe(comm[tab_idx].outbound);
 
   // Make the read ends non-blocking 
-  
-  
+  non_block_pipe(comm[tab_idx].inbound[0]);
+  non_block_pipe(comm[tab_idx].outbound[0]);
+
   // fork and create new render tab
   if (fork() == 0) {
-    perror("child process for tab has arrived");
+    printf("child process for tab has arrived\n");
     
-  // Note: render has different arguments now: tab_index, both pairs of pipe fd's
-  // (inbound then outbound) -- this last argument will be 4 integers "a b c d"
-  // Hint: stringify args
+    // Note: render has different arguments now: tab_index, both pairs of pipe fd's
+    // (inbound then outbound) -- this last argument will be 4 integers "a b c d"
+    // Hint: stringify args, from piazza:
+      // char pipe_str[20];
+      // sprintf (pipe_str, "%d %d", inbound[0], inbound[1]);
     int in_r = comm[tab_idx].inbound[0];
     int in_w = comm[tab_idx].inbound[1];
     int out_r = comm[tab_idx].outbound[0];
     int out_w = comm[tab_idx].outbound[1];
+    printf("./render %d %d %d %d %d \n", tab_idx, in_r, in_w, out_r, out_w);
     
     char args[100]; // TODO:  change this later to a value that is more limited
-    sprintf(args, " %d %d %d %d", in_r, in_w, out_r, out_w);
-    execl("./render", args);
+    sprintf(args, "./render %d %d %d %d %d", tab_idx, in_r, in_w, out_r, out_w);
+    execl("render", args, NULL);
   }
 
+  TABS[tab_idx].free = false; // need to update tabs list
+  printf("parent controller is still here \n");
   // Controller parent just does some TABS bookkeeping
 }
 
@@ -238,10 +251,10 @@ int run_control() {
     // Loop across all pipes from VALID tabs -- starting from 0
     for (i=0; i<MAX_TABS; i++) {
       if (TABS[i].free) continue;
-      nRead = read(comm[i].outbound[0], &req, sizeof(req_t));
+      // nRead = read(comm[i].outbound[0], &req, sizeof(req_t));
 
       // Check that nRead returned something before handling cases
-      if (nRead != 0) continue;
+      if (nRead > 0) continue;
 
       // Case 1: PLEASE_DIE
 
