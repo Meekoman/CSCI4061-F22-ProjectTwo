@@ -182,15 +182,22 @@ void new_tab_created_cb (GtkButton *button, gpointer data) {
     int in_w = comm[tab_idx].inbound[1];
     int out_r = comm[tab_idx].outbound[0];
     int out_w = comm[tab_idx].outbound[1];
-    printf("./render %d %d %d %d %d \n", tab_idx, in_r, in_w, out_r, out_w);
     
-    char args[100]; // TODO:  change this later to a value that is more limited
-    sprintf(args, "./render %d %d %d %d %d", tab_idx, in_r, in_w, out_r, out_w);
-    execl("render", args, NULL);
+    char filename[] = {"render\0"};
+    char index[5];
+    char args[100];
+    sprintf(index, "%d", tab_idx);
+    sprintf(args, "%d %d %d %d", in_r, in_w, out_r, out_w);
+
+    printf("%s \n", index); 
+    printf("%s \n", args); 
+
+    execl("./render", filename, index, args, NULL);
   }
 
   TABS[tab_idx].free = false; // need to update tabs list
   printf("parent controller is still here \n");
+
   // Controller parent just does some TABS bookkeeping
 }
 
