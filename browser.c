@@ -121,9 +121,12 @@ void handle_uri (char *uri, int tab_index) {
     return;
   }
 
-  //TODO: Find out why write is outputting -1
-  if (write(comm[tab_index].inbound[1], NEW_URI_ENTERED, (sizeof (char)*MAX_URL)) == -1)
-    fprintf(stderr, "Error writing to pipe in handle_uri\n");
+  req_t request;
+  strcpy(request.uri, uri);
+  request.type = NEW_URI_ENTERED;
+  request.tab_index = tab_index;
+
+  write(comm[tab_index].inbound[1], &request, sizeof(req_t));
 }
 
 
@@ -286,6 +289,7 @@ int run_control() {
 
 int main(int argc, char **argv)
 {
+
   if (argc != 1) {
     fprintf (stderr, "browser <no_args>\n");
     exit (0);
@@ -297,17 +301,23 @@ int main(int argc, char **argv)
   init_favorites(".favorites");
 
   // Fork controller
-  while (fork()==0) {
-    // Child creates a pipe for itself comm[0]
-    pipe(comm[0].inbound);
-    pipe(comm[0].outbound);
-
-    printf("this is the child process speaking \n");
-    // then calls run_control ()
-    int i = run_control();
-    printf("run status is %d", i);
+  int pid = fork();
+  if(pid < 0){
+    perror("Error forking.\n");
   }
-  
-  // Parent waits ...
-  wait(0);
+  //child
+  if(pid == 0){
+    pipe(comm[0].outbound);
+    non_block_pipe(comm[0].outbound[0]); 
+    run_control();
+  }
+  //parent waits
+  else{
+    if(wait(NULL) == -1){
+      perror("Parent didn't wait.\n");
+      exit(-1);
+    }
+    wait(NULL);
+    exit(0);
+  }
 }
