@@ -139,6 +139,7 @@ void uri_entered_cb (GtkWidget* entry, gpointer data) {
   }
 
   char *uripoint;
+  char uri[MAX_URL];
   int tab_index;
 
   // Get the tab (hint: wrapper.h)
@@ -147,10 +148,11 @@ void uri_entered_cb (GtkWidget* entry, gpointer data) {
 
   // Get the URL (hint: wrapper.h)
   uripoint = get_entered_uri(entry);
-  fprintf(stderr, "URI entered: %s\n", uripoint);
+  strncpy(uri, uripoint, MAX_URL);
+  fprintf(stderr, "URI entered: %s\n", uri);
 
   // Hint: now you are ready to handle_the_uri
-  handle_uri(uripoint, tab_index);
+  handle_uri(uri, tab_index);
 }
   
 
@@ -261,6 +263,7 @@ int run_control() {
   while (1) {
     process_single_gtk_event();
     // Read from all tab pipes including private pipe (index 0)
+    
     // to handle commands:
     // PLEASE_DIE (controller should die, self-sent): send PLEASE_DIE to all tabs
     // From any tab:
@@ -270,7 +273,7 @@ int run_control() {
     // Loop across all pipes from VALID tabs -- starting from 0
     for (i=0; i<MAX_TABS; i++) {
       if (TABS[i].free) continue;
-      // nRead = read(comm[i].outbound[0], &req, sizeof(req_t));
+      nRead = read(comm[i].outbound[0], &req, sizeof(req_t));
 
       // Check that nRead returned something before handling cases
       if (nRead > 0) continue;
