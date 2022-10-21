@@ -1,3 +1,9 @@
+/* CSCI-4061 Fall 2022
+ * Group Member #1: Amir Mohamed, moha1276
+ * Group Member #2: Thomas Suiter, suite014
+ * Group Member #3: Shannon Wallace, walla423
+ */
+
 #include "wrapper.h"
 #include "util.h"
 #include <sys/types.h>
@@ -114,8 +120,10 @@ void handle_uri (char *uri, int tab_index) {
     alert("Tab number exceeds MAX_TABS");
     return;
   }
-  write(comm[tab_index].outbound[1], 
-        uri, (sizeof (char)*MAX_URL));
+
+  //TODO: Find out why write is outputting -1
+  if (write(comm[tab_index].inbound[1], NEW_URI_ENTERED, (sizeof (char)*MAX_URL)) == -1)
+    fprintf(stderr, "Error writing to pipe in handle_uri\n");
 }
 
 
@@ -123,7 +131,6 @@ void handle_uri (char *uri, int tab_index) {
 // If everything checks out, a NEW_URI_ENTERED command is sent (see Hint)
 // Short function
 void uri_entered_cb (GtkWidget* entry, gpointer data) {
-  
   if(data == NULL) {	
     return;
   }
@@ -133,9 +140,11 @@ void uri_entered_cb (GtkWidget* entry, gpointer data) {
 
   // Get the tab (hint: wrapper.h)
   tab_index = query_tab_id_for_request(entry, data);
+  fprintf(stderr, "Tab index %d\n", tab_index);
 
   // Get the URL (hint: wrapper.h)
   uripoint = get_entered_uri(entry);
+  fprintf(stderr, "URI entered: %s\n", uripoint);
 
   // Hint: now you are ready to handle_the_uri
   handle_uri(uripoint, tab_index);
@@ -154,7 +163,7 @@ void new_tab_created_cb (GtkButton *button, gpointer data) {
   }
 
   // at tab limit?
-  if (get_num_tabs()>MAX_TABS) {
+  if (get_num_tabs() > MAX_TABS) {
     return;
   }
 
@@ -277,7 +286,6 @@ int run_control() {
 
 int main(int argc, char **argv)
 {
-
   if (argc != 1) {
     fprintf (stderr, "browser <no_args>\n");
     exit (0);
