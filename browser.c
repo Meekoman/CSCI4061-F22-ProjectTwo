@@ -51,16 +51,25 @@ int get_num_tabs () {
 
 // get next free tab index
 int get_free_tab () {
-  return 1;
+  for (int i = 1; i < MAX_TABS; i++) {
+    if(TABS[i].free == 1){
+      fprintf(stderr, "Tab %d is free for use\n", i);
+      return i;
+    }
+  }
+  //Return -1 for error
+  return -1;
 }
 
 // init TABS data structure
 void init_tabs () {
   int i;
 
-  for (i=1; i<MAX_TABS; i++)
+  for (i=1; i<MAX_TABS; i++){
     TABS[i].free = 1;
-  TABS[0].free = 0;
+    TABS[0].free = 0;
+  }
+
 }
 
 /***********************************/
@@ -182,7 +191,8 @@ void new_tab_created_cb (GtkButton *button, gpointer data) {
   non_block_pipe(comm[tab_idx].outbound[0]);
 
   // fork and create new render tab
-  if (fork() == 0) {
+  int pid = fork();
+  if (pid == 0) {
     printf("child process for tab has arrived\n");
     
     // Note: render has different arguments now: tab_index, both pairs of pipe fd's
@@ -206,6 +216,7 @@ void new_tab_created_cb (GtkButton *button, gpointer data) {
 
     execl("./render", filename, index, args, NULL);
   }
+
 
   TABS[tab_idx].free = false; // need to update tabs list
   printf("parent controller is still here \n");
@@ -246,7 +257,7 @@ void menu_item_selected_cb (GtkWidget *menu_item, gpointer data) {
 // Long function
 int run_control() {
   browser_window * b_window = NULL;
-  int i, nRead;
+  int i, j, nRead;
   req_t req;
 
  
@@ -270,16 +281,34 @@ int run_control() {
     // Loop across all pipes from VALID tabs -- starting from 0
     for (i=0; i<MAX_TABS; i++) {
       if (TABS[i].free) continue;
-      // nRead = read(comm[i].outbound[0], &req, sizeof(req_t));
+      nRead = read(comm[i].outbound[0], &req, sizeof(req_t));
 
       // Check that nRead returned something before handling cases
       if (nRead > 0) continue;
 
       // Case 1: PLEASE_DIE
+      if (nRead ==  3) {
+        //Send TAB_IS_DEAD to all open tabs
+        req.type = TAB_IS_DEAD;
+        for(j = 1; j < MAX_TABS; j++){
+          write(comm[j].outbound[1], &req, sizeof(req_t));
+        }
 
+        //Kill controller
+        kill(TABS[0].pid, SIGKILL);
+        fprintf(stderr, "Controller was closed\n");
+      }
       // Case 2: TAB_IS_DEAD
-	    
+	    if (nRead == 2){
+        kill(TABS[i].pid, SIGKILL);
+        fprintf(stderr, "Tab %d was closed\n", i);
+      }
       // Case 3: IS_FAV
+      if (nRead == 1){
+        //fav_ok (char *uri)
+        //add_uri_to_favorite_menu (browser_window *b_window, char *uri);
+        //update_favorites_file (char *uri)
+      }
     }
     usleep(1000);
   }
