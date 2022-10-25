@@ -347,7 +347,7 @@ int run_control() {
       }
       // Case 2: TAB_IS_DEAD
 	    if (req.type == 2){
-        int temp = i;
+        //int temp = i;
 
         //Send PLEASE_DIE to controller for tab
         fprintf(stderr, "Sending PLEASE_DIE to controller for tab");
