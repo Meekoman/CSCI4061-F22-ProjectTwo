@@ -237,6 +237,8 @@ void new_tab_created_cb (GtkButton *button, gpointer data) {
 
   // fork and create new render tab
   int pid = fork();
+  TABS[tab_idx].pid = pid;
+
   if (pid == 0) {
     printf("child process for tab has arrived\n");
     
@@ -302,7 +304,7 @@ void menu_item_selected_cb (GtkWidget *menu_item, gpointer data) {
 // Long function
 int run_control() {
   browser_window * b_window = NULL;
-  int i, j, nRead;
+  int i, nRead;
   req_t req;
 
  
@@ -333,24 +335,27 @@ int run_control() {
       if (nRead > 0) continue;
 
       // Case 1: PLEASE_DIE
-      if (nRead ==  3) {
-        //Send TAB_IS_DEAD to all open tabs
-        req.type = TAB_IS_DEAD;
-        for(j = 1; j < MAX_TABS; j++){
-          write(comm[j].outbound[1], &req, sizeof(req_t));
-        }
+      if (req.type ==  3) {
+        fprintf(stderr, "Tab %d pid: %d \n", i, TABS[i].pid);
 
-        //Kill controller
-        kill(TABS[0].pid, SIGKILL);
-        fprintf(stderr, "Controller was closed\n");
+        kill(TABS[i].pid, SIGKILL);
+        fprintf(stderr, "Tab %d was killed\n", i);
+        TABS[i].free = true;
+        fprintf(stderr, "Tab %d was freed\n", i);
+        
+        req.type = -1;
       }
       // Case 2: TAB_IS_DEAD
-	    if (nRead == 2){
-        kill(TABS[i].pid, SIGKILL);
-        fprintf(stderr, "Tab %d was closed\n", i);
+	    if (req.type == 2){
+        int temp = i;
+
+        //Send PLEASE_DIE to controller for tab
+        fprintf(stderr, "Sending PLEASE_DIE to controller for tab");
+        req.type = PLEASE_DIE;
+        write(comm[i].inbound[1], &req, sizeof(req_t));
       }
       // Case 3: IS_FAV
-      if (nRead == 1){
+      if (req.type == 1){
         //fav_ok (char *uri)
         //add_uri_to_favorite_menu (browser_window *b_window, char *uri);
         //update_favorites_file (char *uri)
