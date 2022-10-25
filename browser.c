@@ -24,6 +24,7 @@
 comm_channel comm[MAX_TABS];         // Communication pipes 
 char favorites[MAX_FAV][MAX_URL];    // Maximum char length of a url allowed
 int num_fav = 0;                     // # favorites
+int favoritesLen = 0;
 
 typedef struct tab_list {
   int free;
@@ -93,6 +94,48 @@ void update_favorites_file (char *uri) {
 // Set up favorites array
 void init_favorites (char *fname) {
   //TODO: 
+  char www[] = "www.\0"; // length 5, 4 char
+	FILE *f;
+	f = fopen(fname, "r"); 
+	if (f==NULL) {
+    perror("error opening favorites");
+ 		exit(0);
+  }
+    
+  // allocating character slots for storing one line/URL while working
+  char tempString[MAX_URL]; 
+  
+  for (int i = 0; 
+	  (fgets(tempString, MAX_URL, f));
+	  i++) 
+  { 
+  
+    // truncate www. if it exists
+    if (strncmp(tempString, www, 4) == 0) // if first4 == www, then: 
+    { 
+      // move pointer to start of string back 4 spaces and copy into blacklist
+      strncpy(favorites[i], (tempString+4), (MAX_URL)); 
+      favoritesLen++;
+      // ex |www.google.com >> www.|google.com
+    }
+
+    // if it doesn't start with "www." then:
+    else {
+      strncpy(favorites[i], tempString, MAX_URL);
+      favoritesLen++;
+    }
+
+    // check that \n wasn't stored as the last char and correct it if it was
+    int l = strlen(favorites[i]);
+    if (favorites[i][l-1]== '\n') {
+      favorites[i][l-1] = '\0';
+    }
+  }  
+
+  if (fclose(f)) {
+  	perror("cannot close file");
+  }
+  return;
 }
 
 // Make fd non-blocking just as in class!
