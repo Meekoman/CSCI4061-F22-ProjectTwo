@@ -41,8 +41,8 @@ tab_list TABS[MAX_TABS];
 // return total number of tabs
 int get_num_tabs () {
   int count = 0;
-  for (int i=1; i < MAX_TABS; i++) {
-    if (TABS[i].free == 0) {
+  for (int i = 1; i <= MAX_TABS; i++) {
+    if (TABS[i].free == false) {
       count++;
     }
   }
@@ -51,8 +51,8 @@ int get_num_tabs () {
 
 // get next free tab index
 int get_free_tab () {
-  for (int i = 1; i < MAX_TABS; i++) {
-    if(TABS[i].free == 1){
+  for (int i = 1; i <= MAX_TABS; i++) {
+    if(TABS[i].free == true){
       return i;
     }
   }
@@ -63,7 +63,7 @@ int get_free_tab () {
 void init_tabs () {
   int i;
 
-  for (i=1; i<MAX_TABS; i++){
+  for (i = 1; i <= MAX_TABS; i++){
     TABS[i].free = 1;
   }
   TABS[0].free = 0;
@@ -118,7 +118,7 @@ void init_favorites (char *fname) {
   }
     
   char url[MAX_URL]; 
-  
+
   while (fgets(url, MAX_URL, f)) { 
     strtok(url, "\n");
     if(fav_ok(url) == 1){
@@ -222,7 +222,7 @@ void new_tab_created_cb (GtkButton *button, gpointer data) {
   }
 
   // at tab limit?
-  if (get_num_tabs() >= MAX_TABS) {
+  if (get_free_tab() == -1) {
     alert("Max tabs reached\n");
     return;
   }
@@ -379,6 +379,7 @@ int run_control() {
         }
         TABS[i].free = 1; // tab is open to reuse
       }
+
       // Case 3: IS_FAV
       if (req.type == IS_FAV) {
         char *uri = req.uri;
