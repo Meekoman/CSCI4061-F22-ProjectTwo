@@ -14,17 +14,16 @@
 #include <gtk/gtk.h>
 #include <signal.h>
 
-#define MAX_TABS 100  // this gives us 99 tabs, 0 is reserved for the controller
+#define MAX_TABS 4  // this gives us 99 tabs, 0 is reserved for the controller
 #define MAX_BAD 1000
 #define MAX_URL 100
-#define MAX_FAV 100
+#define MAX_FAV 4
 #define MAX_LABELS 100 
 
 
 comm_channel comm[MAX_TABS];         // Communication pipes 
 char favorites[MAX_FAV][MAX_URL];    // Maximum char length of a url allowed
 int num_fav = 0;                     // # favorites
-int favoritesLen = 0;
 
 typedef struct tab_list {
   int free;
@@ -42,8 +41,8 @@ tab_list TABS[MAX_TABS];
 // return total number of tabs
 int get_num_tabs () {
   int count = 0;
-  for (int i=0; i < MAX_TABS; i++) {
-    if (TABS[i].free == 1) {
+  for (int i=1; i < MAX_TABS; i++) {
+    if (TABS[i].free == 0) {
       count++;
     }
   }
@@ -54,12 +53,10 @@ int get_num_tabs () {
 int get_free_tab () {
   for (int i = 1; i < MAX_TABS; i++) {
     if(TABS[i].free == 1){
-      fprintf(stderr, "Tab %d is free for use\n", i);
       return i;
     }
   }
-  //Return -1 for error
-  return -1;
+  return -1; //no free tab
 }
 
 // init TABS data structure
@@ -68,9 +65,8 @@ void init_tabs () {
 
   for (i=1; i<MAX_TABS; i++){
     TABS[i].free = 1;
-    TABS[0].free = 0;
   }
-
+  TABS[0].free = 0;
 }
 
 /***********************************/
@@ -80,60 +76,66 @@ void init_tabs () {
 // return 0 if favorite is ok, -1 otherwise
 // both max limit, already a favorite (Hint: see util.h) return -1
 int fav_ok (char *uri) {
-  return 0;
+  if(on_favorites(uri) == 1){ //checks if its on favorites
+    return 1;
+  }
+  else if(num_fav == MAX_FAV){ //checks for max limit
+    return 2;
+  }
+  else{ //ok
+    return 0;
+  }
 }
 
 
 // Add uri to favorites file and update favorites array with the new favorite
 void update_favorites_file (char *uri) {
   // Add uri to favorites file
-
+  FILE *f;
+  f = fopen(".favorites", "a");
+  if(f == NULL){
+    perror("error with open\n");
+    exit(-1);
+  }
+  fprintf(f, "%s\n", uri);
+  if(fclose(f)) {
+    perror("error with closing favorites\n");
+    exit(-2);
+  }
   // Update favorites array with the new favorite
+  strcpy(favorites[num_fav], uri);
+  num_fav++;
 }
 
 // Set up favorites array
 void init_favorites (char *fname) {
   //TODO: 
-  char www[] = "www.\0"; // length 5, 4 char
 	FILE *f;
 	f = fopen(fname, "r"); 
 	if (f==NULL) {
-    perror("error opening favorites");
- 		exit(0);
+    perror("error opening favorites\n");
+ 		exit(-1);
   }
     
-  // allocating character slots for storing one line/URL while working
-  char tempString[MAX_URL]; 
+  char url[MAX_URL]; 
   
-  for (int i = 0; 
-	  (fgets(tempString, MAX_URL, f));
-	  i++) 
-  { 
-  
-    // truncate www. if it exists
-    if (strncmp(tempString, www, 4) == 0) // if first4 == www, then: 
-    { 
-      // move pointer to start of string back 4 spaces and copy into blacklist
-      strncpy(favorites[i], (tempString+4), (MAX_URL)); 
-      favoritesLen++;
-      // ex |www.google.com >> www.|google.com
+  while (fgets(url, MAX_URL, f)) { 
+    strtok(url, "\n");
+    if(fav_ok(url) == 1){
+      continue;
     }
-
-    // if it doesn't start with "www." then:
-    else {
-      strncpy(favorites[i], tempString, MAX_URL);
-      favoritesLen++;
+    else if(fav_ok(url) == 2){
+      break;
     }
-
-    // check that \n wasn't stored as the last char and correct it if it was
-    int l = strlen(favorites[i]);
-    if (favorites[i][l-1]== '\n') {
-      favorites[i][l-1] = '\0';
-    }
+    else{
+      strcpy(favorites[num_fav],url);
+      num_fav++;
+    } 
   }  
 
   if (fclose(f)) {
-  	perror("cannot close file");
+  	perror("cannot close file\n");
+    exit(-2);
   }
   return;
 }
@@ -213,14 +215,15 @@ void uri_entered_cb (GtkWidget* entry, gpointer data) {
 // Create new tab process with pipes
 // Long function
 void new_tab_created_cb (GtkButton *button, gpointer data) {
-  perror("new tab function entered\n");
+  //perror("new tab function entered\n");
 
   if (data == NULL) {
     return;
   }
 
   // at tab limit?
-  if (get_num_tabs() > MAX_TABS) {
+  if (get_num_tabs() >= MAX_TABS) {
+    alert("Max tabs reached\n");
     return;
   }
 
@@ -237,6 +240,9 @@ void new_tab_created_cb (GtkButton *button, gpointer data) {
 
   // fork and create new render tab
   int pid = fork();
+  if(pid < 0){
+    perror("Error forking\n");
+  }
   if (pid == 0) {
     printf("child process for tab has arrived\n");
     
@@ -250,7 +256,6 @@ void new_tab_created_cb (GtkButton *button, gpointer data) {
     int out_r = comm[tab_idx].outbound[0];
     int out_w = comm[tab_idx].outbound[1];
     
-    char filename[] = {"render\0"};
     char index[5];
     char args[100];
     sprintf(index, "%d", tab_idx);
@@ -259,12 +264,20 @@ void new_tab_created_cb (GtkButton *button, gpointer data) {
     printf("%s \n", index); 
     printf("%s \n", args); 
 
-    execl("./render", filename, index, args, NULL);
+    int exe = execl("./render", "render", index, args, NULL);
+    if(exe != 0){
+      printf("Failed to execute render. Error code: %d \n", exe);
+    }
+  }
+  else{
+    // Controller parent just does some TABS bookkeeping
+    TABS[tab_idx].free = 0;
+    TABS[tab_idx].pid = pid;
   }
 
 
-  TABS[tab_idx].free = false; // need to update tabs list
-  printf("parent controller is still here \n");
+  // TABS[tab_idx].free = false; // need to update tabs list
+  // printf("parent controller is still here \n");
 
   // Controller parent just does some TABS bookkeeping
 }
@@ -292,7 +305,7 @@ void menu_item_selected_cb (GtkWidget *menu_item, gpointer data) {
   int tab_id = query_tab_id_for_request(menu_item, data);
 
   // Hint: now you are ready to handle_the_uri
-  handle_uri(basic_uri, tab_id);
+  handle_uri(uri, tab_id);
 
   return;
 }
@@ -330,30 +343,46 @@ int run_control() {
       nRead = read(comm[i].outbound[0], &req, sizeof(req_t));
 
       // Check that nRead returned something before handling cases
-      if (nRead > 0) continue;
+      if (nRead== -1 && errno == EAGAIN) continue;
+      if (nRead== -1 && errno != EAGAIN){
+        perror("different error read failed\n");
+        exit(1);
+      }
 
       // Case 1: PLEASE_DIE
-      if (nRead ==  3) {
-        //Send TAB_IS_DEAD to all open tabs
-        req.type = TAB_IS_DEAD;
-        for(j = 1; j < MAX_TABS; j++){
-          write(comm[j].outbound[1], &req, sizeof(req_t));
+      if (req.type == PLEASE_DIE) {
+        for (j = 1; j < MAX_TABS; j++) {
+          if (TABS[j].free) continue;
+          req_t treq;
+          treq.type = PLEASE_DIE;
+          write(comm[j].inbound[1], &treq, sizeof(req_t));
         }
-
-        //Kill controller
-        kill(TABS[0].pid, SIGKILL);
-        fprintf(stderr, "Controller was closed\n");
+        exit(0); // kill controller
       }
+
       // Case 2: TAB_IS_DEAD
-	    if (nRead == 2){
-        kill(TABS[i].pid, SIGKILL);
-        fprintf(stderr, "Tab %d was closed\n", i);
+	    if (req.type == TAB_IS_DEAD) {
+        if (kill(TABS[i].pid, SIGKILL) == -1) {
+          perror("failed call\n");
+          exit(-1);
+        }
+        int exitstatus;
+        if (waitpid(TABS[i].pid, &exitstatus, 0) == -1) {
+          perror("failed wait\n");
+          exit(1);
+        }
+        TABS[i].free = 1; // tab is open to reuse
       }
       // Case 3: IS_FAV
-      if (nRead == 1){
-        //fav_ok (char *uri)
-        //add_uri_to_favorite_menu (browser_window *b_window, char *uri);
-        //update_favorites_file (char *uri)
+      if (req.type == IS_FAV) {
+        char *uri = req.uri;
+        if (fav_ok(uri)) {
+          alert("Already a favorite or max favs");
+        } 
+        else {
+         add_uri_to_favorite_menu(b_window, uri); 
+         update_favorites_file(uri);  
+        }
       }
     }
     usleep(1000);
@@ -381,7 +410,7 @@ int main(int argc, char **argv)
     perror("Error forking.\n");
   }
   //child
-  if(pid == 0){
+  if(pid == 0){ //error check
     pipe(comm[0].outbound);
     non_block_pipe(comm[0].outbound[0]); 
     run_control();
@@ -392,7 +421,6 @@ int main(int argc, char **argv)
       perror("Parent didn't wait.\n");
       exit(-1);
     }
-    wait(NULL);
     exit(0);
   }
 }
