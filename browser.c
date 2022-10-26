@@ -383,9 +383,12 @@ int run_control() {
       // Case 3: IS_FAV
       if (req.type == IS_FAV) {
         char *uri = req.uri;
-        if (fav_ok(uri)) {
-          alert("Already a favorite or max favs");
+        if (fav_ok(uri) == 1) {
+          alert("Already a favorite");
         } 
+        else if(fav_ok(uri) == 2){
+          alert("No more favorites can be added");
+        }
         else {
          add_uri_to_favorite_menu(b_window, uri); 
          update_favorites_file(uri);  
