@@ -240,9 +240,14 @@ void new_tab_created_cb (GtkButton *button, gpointer data) {
 
   // fork and create new render tab
   int pid = fork();
+<<<<<<< HEAD
   if(pid < 0){
     perror("Error forking\n");
   }
+=======
+  TABS[tab_idx].pid = pid;
+
+>>>>>>> 474210f1a94d6d55ad0d288dd554a230e4555aa7
   if (pid == 0) {
     printf("child process for tab has arrived\n");
     
@@ -315,7 +320,7 @@ void menu_item_selected_cb (GtkWidget *menu_item, gpointer data) {
 // Long function
 int run_control() {
   browser_window * b_window = NULL;
-  int i, j, nRead;
+  int i, nRead;
   req_t req;
 
  
@@ -350,6 +355,7 @@ int run_control() {
       }
 
       // Case 1: PLEASE_DIE
+<<<<<<< HEAD
       if (req.type == PLEASE_DIE) {
         for (j = 1; j < MAX_TABS; j++) {
           if (TABS[j].free) continue;
@@ -358,9 +364,21 @@ int run_control() {
           write(comm[j].inbound[1], &treq, sizeof(req_t));
         }
         exit(0); // kill controller
+=======
+      if (req.type ==  3) {
+        fprintf(stderr, "Tab %d pid: %d \n", i, TABS[i].pid);
+
+        kill(TABS[i].pid, SIGKILL);
+        fprintf(stderr, "Tab %d was killed\n", i);
+        TABS[i].free = true;
+        fprintf(stderr, "Tab %d was freed\n", i);
+        
+        req.type = -1;
+>>>>>>> 474210f1a94d6d55ad0d288dd554a230e4555aa7
       }
 
       // Case 2: TAB_IS_DEAD
+<<<<<<< HEAD
 	    if (req.type == TAB_IS_DEAD) {
         if (kill(TABS[i].pid, SIGKILL) == -1) {
           perror("failed call\n");
@@ -383,6 +401,21 @@ int run_control() {
          add_uri_to_favorite_menu(b_window, uri); 
          update_favorites_file(uri);  
         }
+=======
+	    if (req.type == 2){
+        //int temp = i;
+
+        //Send PLEASE_DIE to controller for tab
+        fprintf(stderr, "Sending PLEASE_DIE to controller for tab");
+        req.type = PLEASE_DIE;
+        write(comm[i].inbound[1], &req, sizeof(req_t));
+      }
+      // Case 3: IS_FAV
+      if (req.type == 1){
+        //fav_ok (char *uri)
+        //add_uri_to_favorite_menu (browser_window *b_window, char *uri);
+        //update_favorites_file (char *uri)
+>>>>>>> 474210f1a94d6d55ad0d288dd554a230e4555aa7
       }
     }
     usleep(1000);
