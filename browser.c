@@ -40,8 +40,8 @@ tab_list TABS[MAX_TABS];
 // return total number of tabs
 int get_num_tabs () {
   int count = 0;
-  for (int i = 1; i <= MAX_TABS; i++) {
-    if (TABS[i].free == false) {
+  for (int i = 1; i < MAX_TABS; i++) {
+    if (!TABS[i].free) {
       count++;
     }
   }
@@ -50,8 +50,8 @@ int get_num_tabs () {
 
 // get next free tab index, returns -1 if no tabs free
 int get_free_tab () {
-  for (int i = 1; i <= MAX_TABS; i++) {
-    if(TABS[i].free == true){
+  for (int i = 1; i < MAX_TABS; i++) {
+    if(TABS[i].free){
       return i;
     }
   }
@@ -275,7 +275,6 @@ void menu_item_selected_cb (GtkWidget *menu_item, gpointer data) {
   }
   
   // Note: For simplicity, currently we assume that the label of the menu_item is a valid url
-
   char *basic_uri = (char *)gtk_menu_item_get_label(GTK_MENU_ITEM(menu_item));
 
   char uri[MAX_URL];
@@ -315,28 +314,30 @@ int run_control() {
       if (TABS[i].free) continue;
       nRead = read(comm[i].outbound[0], &req, sizeof(req_t));
 
-      if (nRead== -1 && errno == EAGAIN) continue;
-      if (nRead== -1 && errno != EAGAIN){
+      if (nRead == -1 && errno == EAGAIN) continue;
+      if (nRead == -1 && errno != EAGAIN){
         perror("different error read failed\n");
         exit(1);
       }
 
       // Case 1: PLEASE_DIE
-      if (req.type == PLEASE_DIE) {
+      if (nRead != -1 && req.type == PLEASE_DIE) {
         for (j = 1; j < MAX_TABS; j++) {
           if (TABS[j].free) continue;
           req_t treq;
           treq.type = PLEASE_DIE;
-          int err = write(comm[j].inbound[1], &treq, sizeof(req_t));
-          if (err == -1) {
+          treq.tab_index = j;
+          if (write(comm[j].inbound[1], &treq, sizeof(req_t)) == -1) {
             perror("error writing PLEASE_DIE to pipe\n");
           }
         }
+        for(j = 1; j < get_num_tabs(); j++)
+          wait(NULL);
         exit(0); 
       }
 
       // Case 2: TAB_IS_DEAD
-	    if (req.type == TAB_IS_DEAD) {
+	    if (nRead != -1 && req.type == TAB_IS_DEAD) {
         if (kill(TABS[i].pid, SIGKILL) == -1) {
           perror("failed call\n");
           exit(-1);
@@ -350,7 +351,7 @@ int run_control() {
       }
 
       // Case 3: IS_FAV
-      if (req.type == IS_FAV) {
+      if (nRead != -1 && req.type == IS_FAV) {
         char *uri = req.uri;
         if (fav_ok(uri) == 1) {
           alert("Already a favorite");
@@ -362,6 +363,9 @@ int run_control() {
          add_uri_to_favorite_menu(b_window, uri); 
          update_favorites_file(uri);  
         }
+      }
+      if(nRead != -1){
+        fprintf(stderr, "Please provide command in the controller\n");
       }
     }
     usleep(1000);
